@@ -14,6 +14,8 @@ import java.util.*;
 public class Parser {
 
     private static final String DURATION_ENTER_IS_NOT_SUPPORTED = "Duration enter is not supported";
+    private static final String INITIAL_DATE_SHOULD_NOT_BE_NULL = "Initial date shouldn't be empty";
+    private static final String THRESHOLD_SHOULD_NOT_BE_NULL = "Threshold shouldn't be empty";
     private final static String START_DATE = "startDate";
     private final static String DURATION = "duration";
     private final static String THRESHOLD = "threshold";
@@ -151,7 +153,7 @@ public class Parser {
             Map opts = Parser.getOpts(args);
             String dateFromStr = (String) opts.get(START_DATE);
             String duration = (String) opts.get(DURATION);
-            Integer threshold = Integer.valueOf((String) opts.get(THRESHOLD));
+            String threshold = (String) opts.get(THRESHOLD);
 
             if (dateFromStr != null) {
                 // parsing initial date
@@ -159,10 +161,16 @@ public class Parser {
                 // getting final date according to the duration enter
                 LocalDateTime dateTimeTo = getFinalDate(duration, dateTimeFrom);
 
-                Parser parser = new Parser();
-                parser.processFile(dateTimeFrom, dateTimeTo, threshold);
+                if(threshold != null && !threshold.equals("")) {
+                    Integer thresholdInt = Integer.valueOf(threshold);
+                    Parser parser = new Parser();
+                    parser.processFile(dateTimeFrom, dateTimeTo, thresholdInt);
+                } else {
+                    throw new Exception(THRESHOLD_SHOULD_NOT_BE_NULL);
+                }
+
             } else {
-                throw new Exception("Initial date shouldn't be null");
+                throw new Exception(INITIAL_DATE_SHOULD_NOT_BE_NULL);
             }
         } catch (Exception e) {
             e.printStackTrace();
