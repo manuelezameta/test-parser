@@ -1,15 +1,19 @@
 package com.ef;
 
-import com.ef.utils.Utils;
+import com.ef.domain.IpBlockLine;
+import com.ef.domain.LogLine;
+import com.ef.persistence.ParserPersistence;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 
 public class Parser {
 
+    private static final String DURATION_ENTER_IS_NOT_SUPPORTED = "Duration enter is not supported";
     private final static String START_DATE = "startDate";
     private final static String DURATION = "duration";
     private final static String THRESHOLD = "threshold";
@@ -39,25 +43,71 @@ public class Parser {
         return optsMap;
     }
 
-    private void loadFile() throws IOException, NullPointerException {
+    private void processFile(LocalDateTime dateTimeFrom,
+                             LocalDateTime dateTimeTo,
+                             int threshold) throws IOException, NullPointerException {
         InputStream inputStream = null;
         Scanner scanner = null;
+        ParserPersistence parserPersistence = new ParserPersistence();
+
         try {
             inputStream = getClass().getResourceAsStream("assets/access.log");
-            System.out.println(Utils.getBytes(inputStream).length);
             scanner = new Scanner(inputStream);
+            Map<String, Integer> ipProcessed = new HashMap<>();
+            List<LogLine> logLines = new ArrayList<>();
+            List<IpBlockLine> ipBlockLines = new ArrayList<>();
 
             if (scanner.ioException() != null) {
                 throw scanner.ioException();
             }
 
-            int count = 0;
-
-            while (scanner.hasNextLine() && count < 6) {
+            while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
-                System.out.println(line);
-                count++;
+                String[] data = line.split("\\|");
+                String logDate = data[0];
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+                LocalDateTime dateTimeInput = LocalDateTime.parse(logDate, formatter);
+
+                if (isBetweenDates(dateTimeFrom, dateTimeTo, dateTimeInput)) {
+                    Integer counter = ipProcessed.get(data[1]);
+
+                    if (counter != null) {
+                        ipProcessed.put(data[1], counter + 1);
+                    } else {
+                        ipProcessed.put(data[1], 1);
+                    }
+
+                    LogLine logLine = new LogLine();
+                    logLine.setDate(dateTimeInput);
+                    logLine.setIp(data[1]);
+                    logLine.setRequest(data[2]);
+                    logLine.setStatus(Integer.valueOf(data[3]));
+                    logLine.setUserAgent(data[4]);
+
+                    logLines.add(logLine);
+                }
             }
+
+            // save logs into database
+            parserPersistence.saveLogInDb(logLines);
+
+            ipProcessed.forEach((k, v) -> {
+                if (v >= threshold) {
+                    String blockMessage = k + " is blocked to have more than " + threshold + " requests in " +
+                            Duration.between(dateTimeFrom, dateTimeTo).toHours() + " hour(s).";
+
+                    IpBlockLine ipBlockLine = new IpBlockLine();
+                    ipBlockLine.setIp(k);
+                    ipBlockLine.setBlockMessage(blockMessage);
+                    ipBlockLines.add(ipBlockLine);
+
+                    System.out.println(blockMessage);
+                }
+            });
+
+            // save block message into database
+            parserPersistence.saveIpBlockInDb(ipBlockLines);
+
         } finally {
             if (inputStream != null) {
                 inputStream.close();
@@ -68,11 +118,52 @@ public class Parser {
         }
     }
 
+    private static LocalDateTime getInitialDate(String dateFromStr) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        return LocalDateTime.parse(dateFromStr.replace(".", " "), formatter);
+    }
+
+    private static LocalDateTime getFinalDate(String duration,
+                                              LocalDateTime initialDate) throws Exception {
+        switch (duration) {
+            case "hourly":
+                return initialDate.plusHours(1);
+            case "daily":
+                return initialDate.plusDays(1);
+            default:
+                throw new Exception(DURATION_ENTER_IS_NOT_SUPPORTED);
+
+        }
+    }
+
+    private static boolean isBetweenDates(LocalDateTime dateTimeFrom, LocalDateTime dateTimeTo, LocalDateTime dateTimeInput) {
+        if ((dateTimeInput.isAfter(dateTimeFrom) && dateTimeInput.isBefore(dateTimeTo)) ||
+                (dateTimeInput.isEqual(dateTimeFrom) || dateTimeInput.isEqual(dateTimeTo))) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     public static void main(String[] args) {
         try {
+            // Parsing the parameters
             Map opts = Parser.getOpts(args);
-            Parser parser = new Parser();
-            parser.loadFile();
+            String dateFromStr = (String) opts.get(START_DATE);
+            String duration = (String) opts.get(DURATION);
+            Integer threshold = Integer.valueOf((String) opts.get(THRESHOLD));
+
+            if (dateFromStr != null) {
+                // parsing initial date
+                LocalDateTime dateTimeFrom = getInitialDate(dateFromStr);
+                // getting final date according to the duration enter
+                LocalDateTime dateTimeTo = getFinalDate(duration, dateTimeFrom);
+
+                Parser parser = new Parser();
+                parser.processFile(dateTimeFrom, dateTimeTo, threshold);
+            } else {
+                throw new Exception("Initial date shouldn't be null");
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

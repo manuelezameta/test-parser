@@ -1,19 +1,19 @@
 package com.ef.domain;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 public class LogLine {
-    private Date date;
+    private LocalDateTime date;
     private String ip;
     private String request;
     private int status;
     private String userAgent;
 
-    public Date getDate() {
+    public LocalDateTime getDate() {
         return date;
     }
 
-    public void setDate(Date date) {
+    public void setDate(LocalDateTime date) {
         this.date = date;
     }
 
