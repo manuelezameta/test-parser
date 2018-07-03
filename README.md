@@ -11,7 +11,7 @@ This a small project which parse a log file according to given parameters
 
 - In order to get the jar file following steps should be performed:
 	
-	1. 	Edit this file **test-parser/parser/src/main/java/com/ef/utils/ConnectionFactory.java**
+	1. 	Edit this file **test-parser/parser/src/main/java/com/ef/utils/ConnectionFactory.java** <br/>
 		Putting there your database credentials accordantly.
 	
 	2.	Run following script in parser folder
